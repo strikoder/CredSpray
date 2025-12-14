@@ -2,7 +2,7 @@
 
 <div align="center">
   
-![credspray](https://github.com/user-attachments/assets/23bc2c7c-2e77-42c4-bb7a-90399a4f2cc8)
+![credspray](https://github.com/user-attachments/assets/db3baf51-f538-4231-bc2f-fc58721be4a6)
 
 
 **Multi-protocol credential validation tool for penetration testing**
