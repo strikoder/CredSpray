@@ -33,7 +33,6 @@ SKIN='\033[38;5;223m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-clear
 # Banner
 echo -e "${BLUE}"
 cat << "EOF"
