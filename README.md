@@ -199,6 +199,17 @@ standalone_username      → SKIPPED (no credential)
 
 ---
 
+## Community Feedback
+
+
+
+<p align="center">
+  <img width="1577" height="185" alt="Credspray" src="https://github.com/user-attachments/assets/c9a3d7fb-0a3b-4797-a9e7-d8c1cd744992" />
+</p>
+
+
+---
+
 ## Acknowledgments
 
 - [NetExec](https://github.com/Pennyw0rth/NetExec) - The powerful network protocol testing tool that powers CredSpray. Check out the [NXC Cheatsheet](https://gist.github.com/strikoder/99635df00444bbf5fc90ca83ec8051a0)
