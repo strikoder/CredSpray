@@ -761,6 +761,11 @@ echo -e "${BLUE}[*] Protocols: ${PROTOCOLS[*]}${NC}"
 echo -e "${BLUE}[*] Starting credential validation...${NC}"
 echo -e "${YELLOW}[*] Press Ctrl+C once to skip current test, twice within ${INTERRUPT_TIMEOUT}s to exit${NC}\n"
 
+# Ping could be disabled, so just warn the user
+if !(ping -c 1 -W 2 $TARGET > /dev/null 2>&1); then
+  echo -e "${YELLOW}[*] WARNING: target ${TARGET} does not respond to ping probes${NC}\n"
+fi
+
 # Test each protocol
 for protocol in "${PROTOCOLS[@]}"; do
     # Reset skip flag for new protocol
