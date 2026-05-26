@@ -536,6 +536,20 @@ PROTOCOL_MAP[8]="wmi"
 PROTOCOL_MAP[9]="vnc"
 PROTOCOL_MAP[10]="nfs"
 
+declare -A protocol_ports=(
+    [smb]=445
+    [winrm]=5985
+    [rdp]=3389
+    [ssh]=22
+    [mssql]=1433
+    [ldap]=389
+    [ftp]=21
+    [wmi]=135
+    [vnc]=5900
+    [nfs]=111
+)
+
+
 if [[ "$protocol_choice" == "all" ]]; then
     PROTOCOLS=("smb" "winrm" "rdp" "ssh" "mssql" "ldap" "ftp" "wmi" "vnc" "nfs")
 else
@@ -773,6 +787,15 @@ for protocol in "${PROTOCOLS[@]}"; do
     
     echo -e "\n${BLUE}========== Testing protocol: $protocol ==========${NC}"
     
+    # First test if target is running service on the expected port
+    if ! [[ -z "${protocol_ports[$protocol]}" ]]; then
+    # We have a port to test this protocol
+        if !(nc -z -w 5 $TARGET ${protocol_ports[$protocol]} > /dev/null 2>&1); then
+        echo -e "${YELLOW}[*] WARNING: skipping test for protocol $protocol. ${TARGET} does not respond to probes on port ${protocol_ports[$protocol]} ${NC}\n"
+        continue
+        fi
+    fi
+
     # Test with passwords if we have them
     if [[ "$HAS_PASSWORDS" == true ]]; then
         # Determine which auth types to test
