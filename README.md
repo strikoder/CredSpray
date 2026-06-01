@@ -207,6 +207,9 @@ standalone_username      → SKIPPED (no credential)
   <img width="1577" height="185" alt="Credspray" src="https://github.com/user-attachments/assets/c9a3d7fb-0a3b-4797-a9e7-d8c1cd744992" />
 </p>
 
+<p align="center">
+  <img width="1239" height="104" alt="gg2" src="https://github.com/user-attachments/assets/f4dbebc9-a5ad-46df-b608-5968fd0c5133" />
+</p>
 
 ---
 
