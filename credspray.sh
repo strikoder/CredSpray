@@ -95,19 +95,20 @@ echo -e ""
 
 # Function to display usage
 usage() {
-    echo "Usage: $0 -t <target> -u <username|userfile> [-p <password|passfile>] [-H <hash|hashfile>] [-c <combined_file>] [-a <auth_type>] [--spray|--no-spray]"
+    echo "Usage: $0 -t <target> [-u <username|userfile>] [-p <password|passfile>] [-H <hash|hashfile>] [-c <combined_file>] [-from-ntlm <file>] [-a <auth_type>] [--spray|--no-spray]"
     echo ""
     echo "Options:"
     echo "  -t <target>      Target IP or hostname (required)"
-    echo "  -u <user>        Username or file with usernames (required)"
+    echo "  -u <user>        Username or file with usernames (required unless using -c or -from-ntlm)"
     echo "  -p <password>    Password or file with ONLY passwords"
     echo "  -H <hash>        NTLM hash or file with ONLY hashes"
     echo "  -c <file>        Combined file with mixed format (user:pass, user:hash, etc.)"
+    echo "  -from-ntlm <f>   Parse NTLM hashes (ntds/sam) and use them as credentials"
     echo "  -a <auth_type>   Authentication type: both (default), local, domain"
     echo "  --spray          Spray mode: test all users with all passwords (DEFAULT)"
     echo "  --no-spray       No-spray mode: pair credentials (user1:pass1, user2:pass2)"
     echo ""
-    echo "Note: Use either (-p OR -H) OR -c, but not multiple credential options together"
+    echo "Note: Use only one credential source (-p, -H, -c, or -from-ntlm)"
     echo ""
     echo "File Formats for -c (combined file):"
     echo "  Spray mode extracts ALL users and ALL credentials separately:"
@@ -129,6 +130,7 @@ usage() {
     echo "  $0 -t 192.168.1.100 -u users.txt -p passwords.txt --spray"
     echo "  $0 -t 192.168.1.100 -u users.txt -c creds.txt --spray"
     echo "  $0 -t 192.168.1.100 -u users.txt -c creds.txt --no-spray"
+    echo "  $0 -t 192.168.1.100 -from-ntlm hashes.ntds --no-spray"
     echo "  $0 -t 192.168.1.100 -u admin -H 'aad3b435b51404eeaad3b435b51404ee:8846f7eaee8fb117ad06bdd830b7586c'"
     exit 1
 }
@@ -145,17 +147,34 @@ is_hash() {
     return 1
 }
 
-# Check for --help or --version before getopts
+# Pre-parse custom options
 SPRAY_MODE=true
-for arg in "$@"; do
-    if [[ "$arg" == "--help" || "$arg" == "-help" ]]; then
-        usage
-    elif [[ "$arg" == "--no-spray" ]]; then
-        SPRAY_MODE=false
-    elif [[ "$arg" == "--spray" ]]; then
-        SPRAY_MODE=true
-    fi
+FROM_NTLM=""
+NEW_ARGS=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --help|-help)
+            usage
+            ;;
+        --no-spray)
+            SPRAY_MODE=false
+            shift
+            ;;
+        --spray)
+            SPRAY_MODE=true
+            shift
+            ;;
+        -from-ntlm|--from-ntlm)
+            FROM_NTLM="$2"
+            shift 2
+            ;;
+        *)
+            NEW_ARGS+=("$1")
+            shift
+            ;;
+    esac
 done
+set -- "${NEW_ARGS[@]}"
 
 # Parse command line arguments
 AUTH_TYPE="both"
@@ -174,14 +193,19 @@ while getopts "t:p:u:H:c:a:h-:" opt; do
 done
 
 # Validate required arguments
-if [[ -z "$TARGET" || -z "$USER_INPUT" ]]; then
-    echo -e "${RED}[!] Error: Target and username/userfile are required${NC}\n"
+if [[ -z "$TARGET" ]]; then
+    echo -e "${RED}[!] Error: Target is required${NC}\n"
+    usage
+fi
+
+if [[ -z "$USER_INPUT" && -z "$COMBINED_FILE" && -z "$FROM_NTLM" ]]; then
+    echo -e "${RED}[!] Error: Username/userfile is required (unless using -c or -from-ntlm)${NC}\n"
     usage
 fi
 
 # Check that either password, hash, or combined file is provided
-if [[ -z "$PASSWORD" && -z "$HASH" && -z "$COMBINED_FILE" ]]; then
-    echo -e "${RED}[!] Error: You must provide either -p (password), -H (hash), or -c (combined file)${NC}\n"
+if [[ -z "$PASSWORD" && -z "$HASH" && -z "$COMBINED_FILE" && -z "$FROM_NTLM" ]]; then
+    echo -e "${RED}[!] Error: You must provide either -p (password), -H (hash), -c (combined file), or -from-ntlm${NC}\n"
     usage
 fi
 
@@ -190,9 +214,10 @@ cred_option_count=0
 [[ -n "$PASSWORD" ]] && ((cred_option_count++))
 [[ -n "$HASH" ]] && ((cred_option_count++))
 [[ -n "$COMBINED_FILE" ]] && ((cred_option_count++))
+[[ -n "$FROM_NTLM" ]] && ((cred_option_count++))
 
 if [[ $cred_option_count -gt 1 ]]; then
-    echo -e "${RED}[!] Error: Use only ONE of: -p (password), -H (hash), or -c (combined file)${NC}\n"
+    echo -e "${RED}[!] Error: Use only ONE of: -p (password), -H (hash), -c (combined file), or -from-ntlm${NC}\n"
     usage
 fi
 
@@ -246,6 +271,7 @@ cleanup_and_exit() {
     [[ -n "$TEMP_USER_FILE" && -f "$TEMP_USER_FILE" ]] && rm -f "$TEMP_USER_FILE"
     [[ -n "$TEMP_PASS_FILE" && -f "$TEMP_PASS_FILE" ]] && rm -f "$TEMP_PASS_FILE"
     [[ -n "$TEMP_HASH_FILE" && -f "$TEMP_HASH_FILE" ]] && rm -f "$TEMP_HASH_FILE"
+    [[ -n "$NTLM_TEMP_FILE" && -f "$NTLM_TEMP_FILE" ]] && rm -f "$NTLM_TEMP_FILE"
     [[ -f "$RESULTS_FILE" ]] && rm -f "$RESULTS_FILE"
     
     echo -e "${YELLOW}[*] Script terminated${NC}"
@@ -437,7 +463,40 @@ USE_TEMP_FILES=false
 HAS_PASSWORDS=false
 HAS_HASHES=false
 
-# Handle combined file (-f option)
+# Handle FROM_NTLM option
+NTLM_TEMP_FILE=""
+if [[ -n "$FROM_NTLM" ]]; then
+    if [[ ! -f "$FROM_NTLM" ]]; then
+        echo -e "${RED}[!] Error: NTLM file not found: $FROM_NTLM${NC}"
+        exit 1
+    fi
+    
+    NTLM_TEMP_FILE=$(mktemp)
+    local_count=0
+    local_parsed=0
+    
+    echo -e "${YELLOW}[*] Parsing NTLM dump file: $FROM_NTLM...${NC}"
+    
+    while IFS=: read -r user rid lmhash nthash rest; do
+        user=$(echo "$user" | tr -d '\r' | xargs)
+        nthash=$(echo "$nthash" | tr -d '\r' | xargs)
+        
+        [[ -z "$user" ]] && continue
+        
+        if [[ -n "$nthash" ]]; then
+            echo "$user:$nthash" >> "$NTLM_TEMP_FILE"
+            ((local_parsed++))
+        fi
+        ((local_count++))
+    done < "$FROM_NTLM"
+    
+    echo -e "${GREEN}[*] NTLM parsing completed: Processed $local_count accounts, extracted $local_parsed valid hashes${NC}"
+    
+    # Treat it as a combined file moving forward
+    COMBINED_FILE="$NTLM_TEMP_FILE"
+fi
+
+# Handle combined file (-c option)
 if [[ -n "$COMBINED_FILE" ]]; then
     if [[ ! -f "$COMBINED_FILE" ]]; then
         echo -e "${RED}[!] Error: Combined file not found: $COMBINED_FILE${NC}"
@@ -506,6 +565,7 @@ cleanup_temp_files() {
         [[ -n "$TEMP_PASS_FILE" && -f "$TEMP_PASS_FILE" ]] && rm -f "$TEMP_PASS_FILE"
         [[ -n "$TEMP_HASH_FILE" && -f "$TEMP_HASH_FILE" ]] && rm -f "$TEMP_HASH_FILE"
     fi
+    [[ -n "$NTLM_TEMP_FILE" && -f "$NTLM_TEMP_FILE" ]] && rm -f "$NTLM_TEMP_FILE"
 }
 
 # Protocol selection menu
